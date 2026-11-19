@@ -175,10 +175,13 @@ jobs:
 
       - name: Custom Packages
         run: |
-          cd ./wrt/
+          # Packages.sh / Handles.sh 需要在 wrt/package/ 下运行（使用 ../feeds 相对路径）
+          cd ./wrt/package/
 
           $GITHUB_WORKSPACE/Scripts/Packages.sh
           $GITHUB_WORKSPACE/Scripts/Handles.sh
+
+          cd ../
           $GITHUB_WORKSPACE/.github/scripts/prepare-i2c-tools.sh
 
       - name: Download Private Config
