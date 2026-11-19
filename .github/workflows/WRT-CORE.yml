@@ -175,7 +175,6 @@ jobs:
 
       - name: Custom Packages
         run: |
-          # Packages.sh / Handles.sh 需要在 wrt/package/ 下运行（使用 ../feeds 相对路径）
           cd ./wrt/package/
 
           $GITHUB_WORKSPACE/Scripts/Packages.sh
@@ -214,7 +213,7 @@ jobs:
             -o "$OUT"
 
           test -s "$OUT"
-          echo "${FILE_PATH} 已下载到 $OUT ($(wc -c < "$OUT") Byte)"
+          echo "${FILE_PATH} Download completed to $OUT ($(wc -c < "$OUT") Byte)"
 
       - name: Inject PPPoE into uci-defaults
         env:
