@@ -1,0 +1,143 @@
+#!/bin/bash
+
+PKG_PATH="$GITHUB_WORKSPACE/wrt/package/"
+
+# 预置OpenClash smart内核和数据
+if [ -d *"OpenClash"* ]; then
+#   CORE_VER="https://raw.githubusercontent.com/vernesong/OpenClash/core/dev/core_version"
+    CORE_TYPE=$(echo $WRT_CONFIG | grep -Eiq "64|86" && echo "amd64" || echo "arm64")
+#   CORE_TUN_VER=$(curl -sL $CORE_VER | sed -n "2{s/\r$//;p;q}")
+
+    # 设置仓库信息
+    OWNER="vernesong"
+    REPO="mihomo"
+    FILE_PATTERN="mihomo-linux-$CORE_TYPE-alpha-smart.*\\.gz"
+
+    # 获取最新的预发布的Smart核心版本信息
+    echo "Retrieving the latest pre-release version information for OpenClash Smart Core..."
+    RELEASE_JSON=$(curl -s "https://api.github.com/repos/$OWNER/$REPO/releases?per_page=5")
+
+    # 提取包含所需资源文件的最新预发布版本资源信息
+    ASSET_URL=$(echo "$RELEASE_JSON" | jq -r --arg pattern "$FILE_PATTERN" \
+        '.[] | select(.prerelease == true) | .assets[] | select(.name | test($pattern)) | .browser_download_url' | head -n1)
+
+    if [ -n "$ASSET_URL" ] && [ "$ASSET_URL" != "null" ]; then
+        echo "✅ Find the Smart Core file download link: $ASSET_URL"
+        FILENAME=$(basename "$ASSET_URL")
+        echo "File Name: $FILENAME"
+    else
+        echo "❌ No matching pre-release resource file found."
+        echo "❌ Stop compiling to avoid incomplete firmware."
+        exit 1
+    fi
+
+    # 获取最新发布的Country.mmdb下载链接
+    LATEST_MMDBURL=$(curl -s "https://api.github.com/repos/alecthw/mmdb_china_ip_list/releases/latest" | \
+        grep -o '"browser_download_url": *"[^"]*Country\.mmdb"' | \
+        cut -d'"' -f4)
+
+    if [ -n "$LATEST_MMDBURL" ]; then
+        echo "✅ The latest MMDB link: $LATEST_MMDBURL"
+        GEO_MMDB="$LATEST_MMDBURL"
+    else
+        echo "❌ No matching Country.mmdb found."
+        exit 1
+    fi
+
+    # 获取最新发布的geosite.dat下载链接
+    LATEST_GEOURL=$(curl -s "https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/releases/latest" | \
+        grep -o '"browser_download_url": *"[^"]*geosite\.dat"' | \
+        cut -d'"' -f4)
+
+    if [ -n "$LATEST_GEOURL" ]; then
+        echo "✅ The Latest GEOSITE link: $LATEST_GEOURL"
+        GEO_SITE="$LATEST_GEOURL"
+    else
+        echo "❌ No matching geosite.dat found."
+        exit 1
+    fi
+
+#   GEO_IP="https://github.com/Loyalsoldier/v2ray-rules-dat/raw/release/geoip.dat"
+
+    cd ./OpenClash/luci-app-openclash/root/etc/openclash/ || exit 1
+    curl -sL -o Model.bin https://github.com/vernesong/mihomo/releases/download/LightGBM-Model/Model.bin && echo "OpenClash Model.bin done!" || exit 1
+    curl -sL -o Country.mmdb "$GEO_MMDB" && echo "✅ OpenClash Country.mmdb done!" || exit 1
+    curl -sL -o GeoSite.dat "$GEO_SITE" && echo "✅ OpenClash GeoSite.dat done!" || exit 1
+#   curl -sL -o GeoIP.dat $GEO_IP && echo "OpenClash GeoIP.dat done!"
+
+    mkdir -p ./core/ && cd ./core/ || exit 1
+    curl -sL -o "$FILENAME" "$ASSET_URL" || exit 1
+
+    gunzip -c "$FILENAME" > clash_meta
+    if [ $? -eq 0 ]; then
+        echo "✅ OpenClash smart core done!"
+        chmod +x clash_meta
+        rm -f "$FILENAME"
+    else
+        echo "❌ Decompression failed!"
+        exit 1
+    fi
+
+    cd "$PKG_PATH" && echo "✅ OpenClash smart core, Model and data have been updated!" || exit 1
+fi
+
+#修改argon主题字体和颜色
+if [ -d *"luci-theme-argon"* ]; then
+	echo " " && cd ./luci-theme-argon/
+	# 上传自己的 Argon 主题背景
+	cp -f $GITHUB_WORKSPACE/pics/bg1.jpg ./htdocs/luci-static/argon/background/bg1.jpg
+ 	echo "✅ theme-argon background has been customized!"
+	
+	sed -i "s/'classic'/'centered'/" ./root/etc/config/argon
+	sed -i "s/'0.5'/'0.3'/" ./root/etc/config/argon
+	sed -i "s/'10'/'3'/" ./root/etc/config/argon
+
+	cd $PKG_PATH && echo "✅ theme-argon-config has been customized!"
+fi
+
+#修改mini-diskmanager菜单位置
+if [ -d "$PKG_PATH/luci-app-mini-diskmanager" ]; then
+	echo " "
+	if sed -i "s/services/system/g" \
+		"$PKG_PATH/luci-app-mini-diskmanager/luci-app-mini-diskmanager/root/usr/share/luci/menu.d/luci-app-mini-diskmanager.json"; then
+		echo "✅ mini-diskmanager has been fixed!"
+	else
+		echo "❌ mini-diskmanager fix failed; continuing!"
+	fi
+fi
+
+#修复TailScale配置文件冲突
+FEEDS_PACKAGES="$PKG_PATH/../feeds/packages"
+TS_FILE="$(find "$FEEDS_PACKAGES" -maxdepth 3 -type f -wholename '*/tailscale/Makefile' -print -quit 2>/dev/null)"
+if [ -f "$TS_FILE" ]; then
+	echo " "
+
+	if sed -i '/\/files/d' "$TS_FILE"; then
+		echo "✅ tailscale has been fixed!"
+	else
+		echo "❌ tailscale fix failed; continuing!"
+	fi
+fi
+
+#修改natmapt菜单位置
+if [ -d "$PKG_PATH/luci-app-natmapt" ]; then
+	echo " "
+	if sed -i "s/network/services/g" \
+		"$PKG_PATH/luci-app-natmapt/root/usr/share/luci/menu.d/luci-app-natmap.json"; then
+		echo "✅ natmapt has been fixed!"
+	else
+		echo "❌ natmapt fix failed; continuing!"
+	fi
+fi
+
+#修复Rust编译失败Add commentMore actions
+#RUST_FILE="$(find "$FEEDS_PACKAGES" -maxdepth 3 -type f -wholename '*/rust/Makefile' -print -quit 2>/dev/null)"
+#if [ -f "$RUST_FILE" ]; then
+#	echo " "
+
+#	if sed -i 's/ci-llvm=true/ci-llvm=false/g' "$RUST_FILE"; then
+#		echo "✅ rust has been fixed!"
+#	else
+#		echo "❌ rust fix failed; continuing!"
+#	fi
+#fi
