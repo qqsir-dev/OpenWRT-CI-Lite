@@ -95,6 +95,29 @@ if [ -d *"luci-theme-argon"* ]; then
 	cd $PKG_PATH && echo "✅ theme-argon-config has been customized!"
 fi
 
+#修改aurora菜单式样
+if [ -d "$PKG_PATH/luci-app-aurora-config" ]; then
+	echo " "
+	if find "$PKG_PATH/luci-app-aurora-config/root/usr/share/aurora/" -type f -name '*.template' -exec sed -i \
+		"s/nav_type '.*'/nav_type 'dropdown'/g; s/struct_radius_base '.*'/struct_radius_base '0.125rem'/g" {} +; then
+		echo "✅ theme-aurora has been fixed!"
+	else
+		echo "❌ theme-aurora fix failed; continuing!"
+	fi
+fi
+
+#修改vantage进度条标签字体（anothaDev/luci-theme-vantage#52）
+if [ -d "$PKG_PATH/luci-theme-vantage" ]; then
+	echo " "
+	if sed -i \
+		-e '/^\/\* progress bars: thin track/,$ { /^\.cbi-progressbar::before {/,/^}/ { s/^[[:space:]]*font: 500 var(--fs-micro)\/1\.2 var(--mono);/\tfont: inherit; line-height: normal;/; } }' \
+		"$PKG_PATH/luci-theme-vantage/luci-theme-vantage/htdocs/luci-static/vantage/vantage.css"; then
+		echo "✅ theme-vantage has been fixed!"
+	else
+		echo "❌ theme-vantage fix failed; continuing!"
+	fi
+fi
+
 #修改mini-diskmanager菜单位置
 if [ -d "$PKG_PATH/luci-app-mini-diskmanager" ]; then
 	echo " "
